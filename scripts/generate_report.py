@@ -1,3 +1,4 @@
+```python
 #!/usr/bin/env python3
 """
 互联网平台营销周报生成器
@@ -61,16 +62,42 @@ def extract_cover(content_html: str) -> str:
     m = re.search(r'src="(https://mmbiz\.qpic\.cn/[^"]+)"', content_html)
     if m:
         return m.group(1)
-    m = re.search(r'cover_image[^(]*\(([^)]+)\)', content_html)
-    if m:
-        return m.group(1)
     return ""
 
-def extract_text(content_html: str, max_chars=300) -> str:
-    """从 HTML 中提取纯文本摘要"""
-    text = re.sub(r'<[^>]+>', '', content_html)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text[:max_chars] + "…" if len(text) > max_chars else text
+def extract_text(content_html: str, max_chars=200) -> str:
+    """
+    从微信文章 HTML 中提取有效正文摘要。
+    微信 content 开头是大量 JS/CSS，真正的文章正文在 id="js_content" 的 div 里。
+    """
+    js_content_match = re.search(
+        r'id=["\']js_content["\'][^>]*>(.*?)</div>',
+        content_html, re.DOTALL
+    )
+    search_area = js_content_match.group(1) if js_content_match else content_html
+
+    paras = re.findall(r'<p[^>]*>(.*?)</p>', search_area, re.DOTALL)
+    texts = []
+    for p in paras:
+        t = re.sub(r'<[^>]+>', '', p)
+        t = re.sub(r'&nbsp;|&#160;', ' ', t)
+        t = re.sub(r'&lt;', '<', t)
+        t = re.sub(r'&gt;', '>', t)
+        t = re.sub(r'&amp;', '&', t)
+        t = re.sub(r'\s+', ' ', t).strip()
+        if len(t) < 15:
+            continue
+        if t.startswith('try{') or t.startswith('var ') or t.startswith('function') or t.startswith('window.'):
+            continue
+        if '{' in t[:20] and '}' in t:
+            continue
+        texts.append(t)
+        if sum(len(x) for x in texts) >= max_chars:
+            break
+
+    if texts:
+        result = ' '.join(texts)
+        return result[:max_chars] + "…" if len(result) > max_chars else result
+    return ""
 
 def parse_entries(feed_xml: bytes, start: datetime, end: datetime, feed_meta: dict) -> list:
     root = ET.fromstring(feed_xml)
@@ -86,8 +113,13 @@ def parse_entries(feed_xml: bytes, start: datetime, end: datetime, feed_meta: di
         link_el = entry.find('atom:link', NS)
         link = link_el.get('href', '') if link_el is not None else ''
         title = entry.findtext('atom:title', '', NS)
+        title = re.sub(r'<[^>]+>', '', title)
+        title = title.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&#34;', '"')
         content = entry.findtext('atom:content', '', NS) or ''
         cover = extract_cover(content)
+        summary = extract_text(content, 200)
+        if not summary:
+            summary = title
         entries.append({
             "date": dt.strftime('%-m/%-d'),
             "dt": dt,
@@ -96,7 +128,7 @@ def parse_entries(feed_xml: bytes, start: datetime, end: datetime, feed_meta: di
             "title": title,
             "link": link,
             "cover": cover,
-            "summary": extract_text(content, 200),
+            "summary": summary,
         })
     return entries
 
@@ -130,7 +162,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .cover img {{ width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }}
   a {{ color: #2563eb; text-decoration: none; }}
   a:hover {{ text-decoration: underline; }}
-  .summary {{ max-width: 300px; color: #555; }}
+  .title-cell {{ max-width: 220px; font-weight: 500; }}
+  .summary {{ max-width: 280px; color: #555; }}
   .week-tag {{ background: #e8f4fd; color: #1565c0; padding: 2px 8px;
                border-radius: 4px; font-size: 12px; }}
   .section-summary {{ background: #fff; border-radius: 8px; padding: 20px;
@@ -141,10 +174,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 flex: 1; min-width: 140px; }}
   .stat-num {{ font-size: 28px; font-weight: 700; color: #e63946; }}
   .stat-label {{ font-size: 12px; color: #888; }}
-  .keywords {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }}
-  .kw {{ background: #e8f4fd; color: #1565c0; padding: 4px 10px;
-         border-radius: 12px; font-size: 13px; }}
-  .trend-list li {{ margin-bottom: 8px; line-height: 1.6; }}
 </style>
 </head>
 <body>
@@ -157,7 +186,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <th>周期范围</th>
   <th>发布日期</th>
   <th>发布平台</th>
-  <th>内容概览</th>
+  <th>文章标题</th>
+  <th>内容摘要</th>
   <th>解决方案</th>
   <th>行业/企业痛点</th>
   <th>新的合作方式</th>
@@ -180,6 +210,7 @@ ROW_TEMPLATE = """<tr>
   <td><span class="week-tag">{week_label}</span></td>
   <td style="white-space:nowrap">{date}</td>
   <td><span class="platform {platform_class}">{platform_name}</span></td>
+  <td class="title-cell"><a href="{link}" target="_blank">{title}</a></td>
   <td class="summary">{summary}</td>
   <td>—</td>
   <td>—</td>
@@ -206,6 +237,7 @@ def build_html(entries: list, week_label: str) -> str:
             date=e["date"],
             platform_name=e["platform_name"],
             platform_class=PLATFORM_CLASS.get(e["platform"], ""),
+            title=e["title"],
             summary=e["summary"],
             cover_html=cover_html,
             link=e["link"],
@@ -225,7 +257,7 @@ def build_html(entries: list, week_label: str) -> str:
 <div class="section-summary">
   <h2>📈 本周平台动向小结</h2>
   <div class="stat-grid">{stat_cards}</div>
-  <p><strong>各平台发文统计</strong>已如上图。如需补充 AI 趋势洞察，请运行带 --ai 参数的版本。</p>
+  <p><strong>各平台发文统计</strong>已如上图。</p>
 </div>"""
 
     return HTML_TEMPLATE.format(
@@ -245,7 +277,7 @@ def update_index(report_filename: str, week_label: str, total: int):
     if index_path.exists():
         content = index_path.read_text()
         if report_filename in content:
-            return  # 已存在
+            return
         content = content.replace("<!-- REPORTS -->", f"{new_item}\n    <!-- REPORTS -->")
         index_path.write_text(content)
     else:
@@ -315,3 +347,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+复制这段 → 打开 https://github.com/renardepapillon/marketing-weekly/edit/main/scripts/generate_report.py → Ctrl+A 全选 → 粘贴 → Commit。
