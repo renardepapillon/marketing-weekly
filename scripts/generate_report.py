@@ -1,3 +1,5 @@
+好，这次只有纯代码，没有任何说明文字：
+
 ```python
 #!/usr/bin/env python3
 """
@@ -65,10 +67,7 @@ def extract_cover(content_html: str) -> str:
     return ""
 
 def extract_text(content_html: str, max_chars=200) -> str:
-    """
-    从微信文章 HTML 中提取有效正文摘要。
-    微信 content 开头是大量 JS/CSS，真正的文章正文在 id="js_content" 的 div 里。
-    """
+    """从微信文章 HTML 中提取有效正文摘要。"""
     js_content_match = re.search(
         r'id=["\']js_content["\'][^>]*>(.*?)</div>',
         content_html, re.DOTALL
@@ -96,7 +95,7 @@ def extract_text(content_html: str, max_chars=200) -> str:
 
     if texts:
         result = ' '.join(texts)
-        return result[:max_chars] + "…" if len(result) > max_chars else result
+        return result[:max_chars] + "..." if len(result) > max_chars else result
     return ""
 
 def parse_entries(feed_xml: bytes, start: datetime, end: datetime, feed_meta: dict) -> list:
@@ -177,7 +176,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>📊 互联网平台营销周报</h1>
+<h1>\U0001f4ca 互联网平台营销周报</h1>
 <div class="meta">周期范围：<strong>{week_label}</strong> &nbsp;|&nbsp; 共收录 <strong>{total}</strong> 篇 &nbsp;|&nbsp; 生成时间：{gen_time}</div>
 
 <table>
@@ -212,12 +211,12 @@ ROW_TEMPLATE = """<tr>
   <td><span class="platform {platform_class}">{platform_name}</span></td>
   <td class="title-cell"><a href="{link}" target="_blank">{title}</a></td>
   <td class="summary">{summary}</td>
-  <td>—</td>
-  <td>—</td>
-  <td>—</td>
-  <td>—</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
   <td class="cover">{cover_html}</td>
-  <td><a href="{link}" target="_blank">原文 →</a></td>
+  <td><a href="{link}" target="_blank">原文</a></td>
 </tr>"""
 
 PLATFORM_CLASS = {
@@ -231,7 +230,7 @@ PLATFORM_CLASS = {
 def build_html(entries: list, week_label: str) -> str:
     rows = []
     for e in sorted(entries, key=lambda x: x['dt']):
-        cover_html = f'<img src="{e["cover"]}" alt="">' if e["cover"] else "—"
+        cover_html = f'<img src="{e["cover"]}" alt="">' if e["cover"] else "-"
         rows.append(ROW_TEMPLATE.format(
             week_label=week_label,
             date=e["date"],
@@ -255,7 +254,7 @@ def build_html(entries: list, week_label: str) -> str:
 
     summary_section = f"""
 <div class="section-summary">
-  <h2>📈 本周平台动向小结</h2>
+  <h2>\U0001f4c8 本周平台动向小结</h2>
   <div class="stat-grid">{stat_cards}</div>
   <p><strong>各平台发文统计</strong>已如上图。</p>
 </div>"""
@@ -273,7 +272,7 @@ def build_html(entries: list, week_label: str) -> str:
 
 def update_index(report_filename: str, week_label: str, total: int):
     index_path = ROOT / "docs" / "index.html"
-    new_item = f'<li><a href="reports/{report_filename}">📅 {week_label}（{total}篇）</a></li>'
+    new_item = f'<li><a href="reports/{report_filename}">{week_label}（{total}篇）</a></li>'
     if index_path.exists():
         content = index_path.read_text()
         if report_filename in content:
@@ -289,7 +288,7 @@ h1{{color:#1a1a2e}}ul{{list-style:none;padding:0}}li{{margin:12px 0}}
 a{{color:#2563eb;text-decoration:none;font-size:16px}}a:hover{{text-decoration:underline}}</style>
 </head>
 <body>
-<h1>📊 互联网平台营销周报</h1>
+<h1>互联网平台营销周报</h1>
 <p>覆盖：巨量引擎 / 快手 / B站 / 腾讯广告 / 阿里妈妈</p>
 <ul>
     {new_item}
@@ -315,7 +314,7 @@ def main():
         start, end, week_label = get_week_range(args.week)
         iso_week = start.strftime('%Y-W%W')
 
-    print(f"📅 生成周报：{week_label}（{start.date()} ~ {end.date()}）")
+    print(f"生成周报：{week_label}（{start.date()} ~ {end.date()}）")
 
     all_entries = []
     for feed in FEEDS:
@@ -326,12 +325,12 @@ def main():
             print(f"{len(entries)} 篇")
             all_entries.extend(entries)
         except Exception as e:
-            print(f"❌ 失败: {e}")
+            print(f"失败: {e}")
 
-    print(f"\n✅ 共收录 {len(all_entries)} 篇文章")
+    print(f"共收录 {len(all_entries)} 篇文章")
 
     if not all_entries:
-        print("⚠️  本周无文章，跳过生成")
+        print("本周无文章，跳过生成")
         return
 
     html = build_html(all_entries, week_label)
@@ -340,13 +339,11 @@ def main():
     week_slug = iso_week.replace(':', '-')
     filename = f"{week_slug}.html"
     (report_dir / filename).write_text(html)
-    print(f"📄 周报已生成：docs/reports/{filename}")
+    print(f"周报已生成：docs/reports/{filename}")
 
     update_index(filename, week_label, len(all_entries))
-    print("🏠 首页已更新")
+    print("首页已更新")
 
 if __name__ == "__main__":
     main()
 ```
-
-复制这段 → 打开 https://github.com/renardepapillon/marketing-weekly/edit/main/scripts/generate_report.py → Ctrl+A 全选 → 粘贴 → Commit。
